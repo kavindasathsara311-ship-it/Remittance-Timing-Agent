@@ -1,0 +1,130 @@
+/** @type {import('tailwindcss').Config} */
+// The full Material 3 palette from the Stitch design export is stored as RGB
+// channel triplets in CSS variables (see src/index.css). Mapping Tailwind colors
+// to `rgb(var(--x) / <alpha-value>)` lets light/dark swap by changing the
+// variable only, AND keeps opacity utilities like `bg-secondary/10` working.
+export default {
+  darkMode: 'class',
+  content: ['./index.html', './src/**/*.{js,jsx}'],
+  theme: {
+    extend: {
+      colors: {
+        // --- Brand / role colors ---
+        primary: 'rgb(var(--color-primary) / <alpha-value>)',
+        'on-primary': 'rgb(var(--color-on-primary) / <alpha-value>)',
+        'primary-container': 'rgb(var(--color-primary-container) / <alpha-value>)',
+        'on-primary-container': 'rgb(var(--color-on-primary-container) / <alpha-value>)',
+        'primary-fixed': 'rgb(var(--color-primary-fixed) / <alpha-value>)',
+        'on-primary-fixed': 'rgb(var(--color-on-primary-fixed) / <alpha-value>)',
+        'primary-fixed-dim': 'rgb(var(--color-primary-fixed-dim) / <alpha-value>)',
+        'on-primary-fixed-variant': 'rgb(var(--color-on-primary-fixed-variant) / <alpha-value>)',
+
+        secondary: 'rgb(var(--color-secondary) / <alpha-value>)',
+        'on-secondary': 'rgb(var(--color-on-secondary) / <alpha-value>)',
+        'secondary-container': 'rgb(var(--color-secondary-container) / <alpha-value>)',
+        'on-secondary-container': 'rgb(var(--color-on-secondary-container) / <alpha-value>)',
+        'secondary-fixed': 'rgb(var(--color-secondary-fixed) / <alpha-value>)',
+        'secondary-fixed-dim': 'rgb(var(--color-secondary-fixed-dim) / <alpha-value>)',
+        'on-secondary-fixed': 'rgb(var(--color-on-secondary-fixed) / <alpha-value>)',
+        'on-secondary-fixed-variant': 'rgb(var(--color-on-secondary-fixed-variant) / <alpha-value>)',
+
+        tertiary: 'rgb(var(--color-tertiary) / <alpha-value>)',
+        'on-tertiary': 'rgb(var(--color-on-tertiary) / <alpha-value>)',
+        'tertiary-container': 'rgb(var(--color-tertiary-container) / <alpha-value>)',
+        'on-tertiary-container': 'rgb(var(--color-on-tertiary-container) / <alpha-value>)',
+        'tertiary-fixed': 'rgb(var(--color-tertiary-fixed) / <alpha-value>)',
+        'tertiary-fixed-dim': 'rgb(var(--color-tertiary-fixed-dim) / <alpha-value>)',
+        'on-tertiary-fixed': 'rgb(var(--color-on-tertiary-fixed) / <alpha-value>)',
+        'on-tertiary-fixed-variant': 'rgb(var(--color-on-tertiary-fixed-variant) / <alpha-value>)',
+
+        error: 'rgb(var(--color-error) / <alpha-value>)',
+        'on-error': 'rgb(var(--color-on-error) / <alpha-value>)',
+        'error-container': 'rgb(var(--color-error-container) / <alpha-value>)',
+        'on-error-container': 'rgb(var(--color-on-error-container) / <alpha-value>)',
+
+        // --- Surfaces ---
+        background: 'rgb(var(--color-background) / <alpha-value>)',
+        'on-background': 'rgb(var(--color-on-background) / <alpha-value>)',
+        surface: 'rgb(var(--color-surface) / <alpha-value>)',
+        'on-surface': 'rgb(var(--color-on-surface) / <alpha-value>)',
+        'surface-variant': 'rgb(var(--color-surface-variant) / <alpha-value>)',
+        'on-surface-variant': 'rgb(var(--color-on-surface-variant) / <alpha-value>)',
+        'surface-container-lowest': 'rgb(var(--color-surface-container-lowest) / <alpha-value>)',
+        'surface-container-low': 'rgb(var(--color-surface-container-low) / <alpha-value>)',
+        'surface-container': 'rgb(var(--color-surface-container) / <alpha-value>)',
+        'surface-container-high': 'rgb(var(--color-surface-container-high) / <alpha-value>)',
+        'surface-container-highest': 'rgb(var(--color-surface-container-highest) / <alpha-value>)',
+        'surface-dim': 'rgb(var(--color-surface-dim) / <alpha-value>)',
+        'surface-bright': 'rgb(var(--color-surface-bright) / <alpha-value>)',
+        'surface-tint': 'rgb(var(--color-surface-tint) / <alpha-value>)',
+        'inverse-surface': 'rgb(var(--color-inverse-surface) / <alpha-value>)',
+        'inverse-on-surface': 'rgb(var(--color-inverse-on-surface) / <alpha-value>)',
+        'inverse-primary': 'rgb(var(--color-inverse-primary) / <alpha-value>)',
+        outline: 'rgb(var(--color-outline) / <alpha-value>)',
+        'outline-variant': 'rgb(var(--color-outline-variant) / <alpha-value>)',
+
+        // --- Semantic status colors (stay meaningful across themes) ---
+        // good = teal/green, wait = amber, neutral = grey, warn = red (fees only)
+        good: 'rgb(var(--status-good) / <alpha-value>)',
+        'good-container': 'rgb(var(--status-good-container) / <alpha-value>)',
+        'on-good-container': 'rgb(var(--status-good-on) / <alpha-value>)',
+        wait: 'rgb(var(--status-wait) / <alpha-value>)',
+        'wait-container': 'rgb(var(--status-wait-container) / <alpha-value>)',
+        'on-wait-container': 'rgb(var(--status-wait-on) / <alpha-value>)',
+        neutral: 'rgb(var(--status-neutral) / <alpha-value>)',
+        'neutral-container': 'rgb(var(--status-neutral-container) / <alpha-value>)',
+        'on-neutral-container': 'rgb(var(--status-neutral-on) / <alpha-value>)',
+        warn: 'rgb(var(--status-warn) / <alpha-value>)',
+        'warn-container': 'rgb(var(--status-warn-container) / <alpha-value>)',
+        'on-warn-container': 'rgb(var(--status-warn-on) / <alpha-value>)',
+      },
+      borderRadius: {
+        DEFAULT: '0.25rem',
+        lg: '0.5rem',
+        xl: '0.75rem',
+        '2xl': '1rem',
+        '3xl': '1.5rem',
+        full: '9999px',
+      },
+      spacing: {
+        'stack-sm': '8px',
+        'stack-md': '16px',
+        'stack-lg': '32px',
+        'gutter-grid': '20px',
+        'margin-page': '24px',
+        'container-max': '1200px',
+      },
+      maxWidth: {
+        'container-max': '1200px',
+      },
+      fontFamily: {
+        sans: ['Lexend', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        'display-lg': ['Lexend', 'sans-serif'],
+        'headline-lg': ['Lexend', 'sans-serif'],
+        'headline-lg-mobile': ['Lexend', 'sans-serif'],
+        'headline-md': ['Lexend', 'sans-serif'],
+        'body-lg': ['Lexend', 'sans-serif'],
+        'body-md': ['Lexend', 'sans-serif'],
+        'label-md': ['Lexend', 'sans-serif'],
+        'label-sm': ['Lexend', 'sans-serif'],
+      },
+      fontSize: {
+        'display-lg': ['40px', { lineHeight: '48px', letterSpacing: '-0.02em', fontWeight: '600' }],
+        'headline-lg': ['32px', { lineHeight: '40px', fontWeight: '600' }],
+        'headline-lg-mobile': ['28px', { lineHeight: '36px', fontWeight: '600' }],
+        'headline-md': ['24px', { lineHeight: '32px', fontWeight: '500' }],
+        'body-lg': ['18px', { lineHeight: '28px', fontWeight: '400' }],
+        'body-md': ['16px', { lineHeight: '24px', fontWeight: '400' }],
+        'label-md': ['14px', { lineHeight: '20px', letterSpacing: '0.01em', fontWeight: '500' }],
+        'label-sm': ['12px', { lineHeight: '16px', letterSpacing: '0.05em', fontWeight: '600' }],
+      },
+      boxShadow: {
+        card: '0px 4px 20px rgba(27,38,49,0.06)',
+        'card-dark': '0px 4px 20px rgba(0,0,0,0.35)',
+        soft: '0px 2px 10px rgba(27,38,49,0.04)',
+        bar: '0px 4px 20px rgba(27,38,49,0.02)',
+      },
+    },
+  },
+  plugins: [],
+};
