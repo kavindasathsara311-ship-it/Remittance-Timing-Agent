@@ -1,0 +1,272 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================================
+   DESIGN TOKENS
+   Material 3 palette extracted from the Stitch design export. Colors are stored
+   as raw RGB channel triplets (e.g. `40 104 97`) so Tailwind can compose them
+   with `rgb(var(--x) / <alpha-value>)` and opacity utilities keep working.
+   Light values live on :root, dark values on .dark — swapping the class on
+   <html> re-themes the entire app with no component changes.
+   ========================================================================== */
+
+:root {
+  /* Primary (warm neutral grey) */
+  --color-primary: 94 95 92;
+  --color-on-primary: 255 255 255;
+  --color-primary-container: 247 246 243;
+  --color-on-primary-container: 112 113 110;
+  --color-primary-fixed: 227 226 223;
+  --color-on-primary-fixed: 27 28 26;
+  --color-primary-fixed-dim: 199 198 196;
+  --color-on-primary-fixed-variant: 70 71 69;
+
+  /* Secondary (calm teal — the brand / "good" accent) */
+  --color-secondary: 40 104 97;
+  --color-on-secondary: 255 255 255;
+  --color-secondary-container: 175 239 229;
+  --color-on-secondary-container: 47 110 103;
+  --color-secondary-fixed: 175 239 229;
+  --color-secondary-fixed-dim: 147 210 201;
+  --color-on-secondary-fixed: 0 32 29;
+  --color-on-secondary-fixed-variant: 3 80 73;
+
+  /* Tertiary (amber — "wait" accent) */
+  --color-tertiary: 128 86 0;
+  --color-on-tertiary: 255 255 255;
+  --color-tertiary-container: 255 244 234;
+  --color-on-tertiary-container: 149 103 21;
+  --color-tertiary-fixed: 255 221 176;
+  --color-tertiary-fixed-dim: 246 188 100;
+  --color-on-tertiary-fixed: 41 24 0;
+  --color-on-tertiary-fixed-variant: 97 64 0;
+
+  /* Error (reserved for genuine fee warnings only) */
+  --color-error: 186 26 26;
+  --color-on-error: 255 255 255;
+  --color-error-container: 255 218 214;
+  --color-on-error-container: 147 0 10;
+
+  /* Surfaces */
+  --color-background: 247 249 255;
+  --color-on-background: 17 29 39;
+  --color-surface: 247 249 255;
+  --color-on-surface: 17 29 39;
+  --color-surface-variant: 216 228 243;
+  --color-on-surface-variant: 68 72 68;
+  --color-surface-container-lowest: 255 255 255;
+  --color-surface-container-low: 237 244 255;
+  --color-surface-container: 227 239 254;
+  --color-surface-container-high: 222 233 248;
+  --color-surface-container-highest: 216 228 243;
+  --color-surface-dim: 208 219 234;
+  --color-surface-bright: 247 249 255;
+  --color-surface-tint: 94 95 92;
+  --color-inverse-surface: 38 49 61;
+  --color-inverse-on-surface: 232 242 255;
+  --color-inverse-primary: 199 198 196;
+  --color-outline: 117 120 116;
+  --color-outline-variant: 197 199 194;
+
+  /* Semantic status colors — good (teal/green), wait (amber), neutral (grey),
+     warn (red). Kept separate from the raw palette so the meaning survives the
+     theme swap and never turns alarming by accident. */
+  --status-good: 40 104 97;
+  --status-good-container: 175 239 229;
+  --status-good-on: 3 80 73;
+  --status-wait: 128 86 0;
+  --status-wait-container: 255 244 234;
+  --status-wait-on: 97 64 0;
+  --status-neutral: 94 95 92;
+  --status-neutral-container: 227 239 254;
+  --status-neutral-on: 68 72 68;
+  --status-warn: 186 26 26;
+  --status-warn-container: 255 218 214;
+  --status-warn-on: 147 0 10;
+
+  /* Card shadow, tuned per theme */
+  --shadow-card: 0px 4px 20px rgba(27, 38, 49, 0.06);
+  --shadow-soft: 0px 2px 10px rgba(27, 38, 49, 0.04);
+  --shadow-bar: 0px 4px 20px rgba(27, 38, 49, 0.02);
+}
+
+.dark {
+  /* Primary */
+  --color-primary: 199 199 195;
+  --color-on-primary: 47 49 46;
+  --color-primary-container: 94 95 92;
+  --color-on-primary-container: 217 217 213;
+  --color-primary-fixed: 227 227 222;
+  --color-on-primary-fixed: 26 28 26;
+  --color-primary-fixed-dim: 199 199 195;
+  --color-on-primary-fixed-variant: 70 71 68;
+
+  /* Secondary (teal lightens for contrast on navy) */
+  --color-secondary: 147 210 201;
+  --color-on-secondary: 0 55 50;
+  --color-secondary-container: 3 80 73;
+  --color-on-secondary-container: 130 193 184;
+  --color-secondary-fixed: 175 239 229;
+  --color-secondary-fixed-dim: 147 210 201;
+  --color-on-secondary-fixed: 0 32 29;
+  --color-on-secondary-fixed-variant: 3 80 73;
+
+  /* Tertiary — dark theme keeps an amber "wait" hue (stewardship-amber) rather
+     than the indigo M3 remap, so the "wait" meaning reads correctly at night. */
+  --color-tertiary: 232 176 89;
+  --color-on-tertiary: 41 24 0;
+  --color-tertiary-container: 58 44 20;
+  --color-on-tertiary-container: 246 188 100;
+  --color-tertiary-fixed: 255 221 176;
+  --color-tertiary-fixed-dim: 232 176 89;
+  --color-on-tertiary-fixed: 41 24 0;
+  --color-on-tertiary-fixed-variant: 97 64 0;
+
+  /* Error */
+  --color-error: 255 180 171;
+  --color-on-error: 105 0 5;
+  --color-error-container: 147 0 10;
+  --color-on-error-container: 255 218 214;
+
+  /* Surfaces (deep navy canvas) */
+  --color-background: 8 20 30;
+  --color-on-background: 215 228 242;
+  --color-surface: 8 20 30;
+  --color-on-surface: 215 228 242;
+  --color-surface-variant: 42 54 65;
+  --color-on-surface-variant: 197 199 193;
+  --color-surface-container-lowest: 4 15 25;
+  --color-surface-container-low: 17 29 39;
+  --color-surface-container: 21 33 43;
+  --color-surface-container-high: 31 43 54;
+  --color-surface-container-highest: 42 54 65;
+  --color-surface-dim: 8 20 30;
+  --color-surface-bright: 47 58 69;
+  --color-surface-tint: 199 199 195;
+  --color-inverse-surface: 215 228 242;
+  --color-inverse-on-surface: 38 50 60;
+  --color-inverse-primary: 94 95 92;
+  --color-outline: 143 145 140;
+  --color-outline-variant: 69 72 67;
+
+  /* Semantic status colors (dark) */
+  --status-good: 147 210 201;
+  --status-good-container: 3 80 73;
+  --status-good-on: 175 239 229;
+  --status-wait: 232 176 89;
+  --status-wait-container: 58 44 20;
+  --status-wait-on: 246 188 100;
+  --status-neutral: 199 199 195;
+  --status-neutral-container: 42 54 65;
+  --status-neutral-on: 215 228 242;
+  --status-warn: 255 180 171;
+  --status-warn-container: 147 0 10;
+  --status-warn-on: 255 218 214;
+
+  --shadow-card: 0px 4px 20px rgba(0, 0, 0, 0.35);
+  --shadow-soft: 0px 2px 10px rgba(0, 0, 0, 0.28);
+  --shadow-bar: 0px 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+/* ============================================================================
+   BASE
+   ========================================================================== */
+@layer base {
+  * {
+    border-color: rgb(var(--color-outline-variant) / 0.3);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-on-background font-sans antialiased;
+    font-feature-settings: 'kern' 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Soft, calm transition when toggling theme */
+    transition: background-color 240ms ease, color 240ms ease;
+  }
+
+  /* Respect users who prefer less motion */
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--color-secondary));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+/* ============================================================================
+   COMPONENT UTILITIES
+   ========================================================================== */
+@layer components {
+  /* Material Symbols icon base (mirrors the design export) */
+  .material-symbols-outlined {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal;
+    font-style: normal;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    -webkit-font-feature-settings: 'liga';
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .material-symbols-outlined.fill-icon {
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+
+  /* Soft rounded card used across the dashboard */
+  .card {
+    @apply bg-surface-container-lowest rounded-xl;
+    box-shadow: var(--shadow-card);
+  }
+
+  .card-pad {
+    @apply p-5 md:p-6;
+  }
+}
+
+@layer utilities {
+  /* Hide scrollbars on horizontally-scrolling tab/button strips */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+  .shadow-bar {
+    box-shadow: var(--shadow-bar);
+  }
+}
