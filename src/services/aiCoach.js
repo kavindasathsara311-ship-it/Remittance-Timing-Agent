@@ -1,23 +1,34 @@
-import { GoogleGenAI } from '@google/genai';
 import { getMockRecommendation, getMockChannels, DEFAULT_PAIR } from './mockData';
+import { calculateEffectiveRates } from '../utils/channelComparison';
 
-// Initialize the Gemini client. We handle the missing key case inside the function
-// so that the app doesn't crash on startup if the key is missing.
-let ai = null;
-try {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (apiKey) {
-    ai = new GoogleGenAI({ apiKey });
+/**
+ * Sends prompt payload to the serverless backend function (/api/coach).
+ *
+ * @param {Object} payload 
+ * @returns {Promise<string>}
+ */
+async function callCoachApi(payload) {
+  const res = await fetch('/api/coach', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Serverless API responded with ${res.status}`);
   }
-} catch (e) {
-  console.warn("Could not initialize GoogleGenAI client:", e);
+
+  const data = await res.json();
+  if (!data.text) {
+    throw new Error('No text returned from coach API');
+  }
+  return data.text;
 }
 
 export async function getCoachResponse(userMessage, conversationHistory = []) {
-  if (!ai) {
-    return "I'm currently running in offline mode. Please add your Gemini API key to `.env.local` to enable real-time responses!";
-  }
-
   try {
     // 1. Gather current context
     const recommendation = getMockRecommendation(DEFAULT_PAIR);
@@ -49,10 +60,7 @@ If the user asks about the current situation or best ways to send, use the provi
 ${contextStr}
     `.trim();
 
-    // 3. Format conversation history for Gemini
-    // The Gemini API strictly requires alternating user/model roles. Since our mock
-    // UI has the coach speaking multiple times in a row, sending it directly in 'contents'
-    // will crash the API. Instead, we'll inject the recent history into the system prompt.
+    // 3. Format conversation history
     const historyText = conversationHistory
       .filter(msg => msg.type !== 'divider')
       .map(msg => `${msg.role === 'user' ? 'User' : 'Coach'}: ${msg.message}`)
@@ -60,18 +68,13 @@ ${contextStr}
 
     const fullSystemInstruction = `${systemInstruction}\n\nHere is the conversation so far:\n${historyText}`;
 
-    // 4. Call the Gemini API with only the latest user message in 'contents'
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: [{ role: 'user', parts: [{ text: userMessage }] }],
-      config: {
-        systemInstruction: fullSystemInstruction,
-      }
+    // 4. Call serverless backend proxy endpoint
+    return await callCoachApi({
+      systemInstruction: fullSystemInstruction,
+      userMessage,
     });
-
-    return response.text;
   } catch (error) {
-    console.error("Gemini API Error:", error);
+    console.warn("Coach API unavailable, using fallback:", error.message);
     // Graceful fallback
     const recommendation = getMockRecommendation(DEFAULT_PAIR);
     let fallbackMsg = "I'm having a little trouble connecting right now, but I can still tell you that ";
@@ -87,12 +90,8 @@ ${contextStr}
 }
 
 export async function getDynamicTrendInterpretation(fxHistory, currentRate) {
-  if (!ai) {
-    return null; // Return null so Dashboard falls back to static message
-  }
-
   try {
-    const historyData = fxHistory.map(d => `${d.date}: ${d.rate}`).join(', ');
+    const historyData = Array.isArray(fxHistory) ? fxHistory.map(d => `${d.date}: ${d.rate}`).join(', ') : '';
     const systemInstruction = `
 You are a quantitative FinTech analyst speaking plainly to a non-technical family in Sri Lanka.
 Your goal is to analyze the numeric trajectory of the exchange rate over the past 30 days.
@@ -106,25 +105,59 @@ Return strictly a 1-2 sentence plain-language explanation of the trend (e.g., "R
 Do NOT return JSON. Do NOT use markdown formatting.
     `.trim();
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: [{ role: 'user', parts: [{ text: "Please interpret this trend." }] }],
-      config: {
-        systemInstruction: systemInstruction,
-      }
+    return await callCoachApi({
+      systemInstruction,
+      userMessage: "Please interpret this trend.",
     });
-
-    return response.text;
   } catch (error) {
-    console.error("Gemini API Error (Trend):", error);
+    console.warn("Gemini API Error (Trend):", error.message);
     return null; // Return null so Dashboard falls back to static message
   }
 }
 
-import { calculateEffectiveRates } from '../utils/channelComparison';
+/**
+ * Generates a short, warm, plain-language AI summary of user remittance patterns.
+ * 
+ * @param {Object} patternData Computed metrics from patternRecognition.js
+ * @returns {Promise<string>} 2-3 sentence AI insight or graceful fallback
+ */
+export async function getPatternInsight(patternData) {
+  if (!patternData || !patternData.hasEnoughData) {
+    return "Once you have at least two past transfer records, I'll be able to spot your family's remittance patterns and help you plan ahead!";
+  }
+
+  const { avgDaysBetweenTransfers, avgDaysToConvert, expectedNextDate, topChannel, avgAmount, totalTransfers } = patternData;
+
+  // Warm fallback message if offline or if AI call fails
+  const fallbackInsight = `Based on your last ${totalTransfers} transfers, your family typically receives funds about every ${avgDaysBetweenTransfers} days (usually around ${avgAmount} via ${topChannel || 'digital channels'}). Your next transfer is likely expected around ${expectedNextDate}, and funds are generally converted within ${avgDaysToConvert} day(s).`;
+
+  try {
+    const systemInstruction = `
+You are a supportive, plain-English financial coach for Sri Lankan families receiving remittances.
+Your goal is to summarize the family's transfer routine in 2-3 warm, encouraging sentences without technical jargon.
+Highlight how often they send, their typical channel, and when they can expect their next transfer.
+
+Pattern Details:
+- Total transfers recorded: ${totalTransfers}
+- Average days between transfers: ${avgDaysBetweenTransfers} days
+- Average days to convert/spend: ${avgDaysToConvert} days
+- Projected next transfer date: ${expectedNextDate}
+- Most frequently used channel: ${topChannel || 'Not specified'}
+- Average transfer amount: ${avgAmount}
+    `.trim();
+
+    return await callCoachApi({
+      systemInstruction,
+      userMessage: "Please provide a warm pattern summary of our family's remittance routine.",
+    });
+  } catch (error) {
+    console.warn("Pattern API unavailable, using fallback:", error.message);
+    return fallbackInsight;
+  }
+}
 
 export async function getChannelComparisonInsight(sendAmount, channelsData) {
-  if (!ai || !channelsData || channelsData.length === 0) {
+  if (!channelsData || channelsData.length === 0) {
     return null;
   }
 
@@ -150,17 +183,12 @@ Explain exactly WHY the best channel won for this specific amount. Specifically 
 Return a strict 2-3 sentence explanation. Do NOT use markdown formatting or tables. Keep it conversational.
     `.trim();
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: [{ role: 'user', parts: [{ text: "Explain the best channel comparison." }] }],
-      config: {
-        systemInstruction: systemInstruction,
-      }
+    return await callCoachApi({
+      systemInstruction,
+      userMessage: "Explain the best channel comparison.",
     });
-
-    return response.text;
   } catch (error) {
-    console.error("Gemini API Error (Channel Comparison):", error);
+    console.warn("Gemini API Error (Channel Comparison):", error.message);
     return null; // Return null for graceful fallback
   }
 }
