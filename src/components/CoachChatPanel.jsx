@@ -11,11 +11,20 @@ import { t } from '../i18n/strings';
  * proactively (no user input needed for MVP). Selecting a scenario replays that
  * conversation with a natural "typing" cadence. The composer is now interactive
  * to allow free-form questions powered by Gemini.
+ *
+ * Proactive opening (feature #4): when `proactiveNudge` is a `speak` decision,
+ * the agent's OWN message — built from this family's transfer pattern and today's
+ * rate — plays first, once, before the scripted scenario. Both props are
+ * optional, so the panel still works standalone exactly as it did before.
  * ===========================================================================*/
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export default function CoachChatPanel({ className = '' }) {
+export default function CoachChatPanel({
+  className = '',
+  proactiveNudge = null,
+  nudgeLoading = false,
+}) {
   const [scenario, setScenario] = useState('good_time');
   const [nonce, setNonce] = useState(0); // bump to replay the same scenario
   const [messages, setMessages] = useState([]);
@@ -24,20 +33,77 @@ export default function CoachChatPanel({ className = '' }) {
 
   const scrollRef = useRef(null);
   const bottomRef = useRef(null);
+  /* Nudge ids already spoken, so re-selecting a scenario never re-delivers the
+   * agent's opening. The agent says the thing once — that's what makes it a
+   * nudge rather than a banner. */
+  const spokenNudgeRef = useRef(new Set());
 
-  /* Play (or replay) a conversation whenever the scenario changes. */
+  /* The effect depends on this KEY, not on the nudge object: its identity
+   * changes whenever the provider recomputes, which would replay the whole
+   * conversation. 'pending' = the agent hasn't decided yet, so we hold. */
+  const opening = proactiveNudge?.decision === 'speak' ? proactiveNudge : null;
+  const openingKey = nudgeLoading ? 'pending' : opening ? opening.id : 'quiet';
+
+  /* Play (or replay) a conversation whenever the scenario — or the agent's
+   * decision — changes. */
   useEffect(() => {
     let cancelled = false;
 
     const run = async () => {
-      // Reset to greeting + a divider naming the scenario about to play.
+      const intro = {
+        id: 'intro',
+        message: t.coach.introBubble,
+        tone: 'info',
+        showAvatar: true,
+        role: 'model',
+      };
+
+      /* Still deciding: show the greeting and let the typing dots run, rather
+       * than starting a conversation we're about to throw away and restart. */
+      if (openingKey === 'pending') {
+        setMessages([intro]);
+        setTyping(true);
+        return;
+      }
+
+      /* Claim the nudge before awaiting anything, so a double run can't speak
+       * it twice. */
+      const speaksFirst = !!opening && !spokenNudgeRef.current.has(opening.id);
+      if (speaksFirst) spokenNudgeRef.current.add(opening.id);
+
+      // Reset to greeting + a divider naming whoever is about to speak first.
       setMessages([
-        { id: 'intro', message: t.coach.introBubble, tone: 'info', showAvatar: true, role: 'model' },
-        { id: `divider-${scenario}`, type: 'divider', label: t.scenarios[scenario].title },
+        intro,
+        {
+          id: `divider-${speaksFirst ? opening.id : scenario}`,
+          type: 'divider',
+          label: speaksFirst ? t.nudge.chatDivider : t.scenarios[scenario].title,
+        },
       ]);
       setTyping(true);
       await sleep(450);
       if (cancelled) return;
+
+      /* The agent speaks FIRST — unprompted, and about THIS family. */
+      if (speaksFirst) {
+        for (const bubble of opening.messages) {
+          setTyping(true);
+          await sleep(650 + Math.random() * 350);
+          if (cancelled) return;
+          setTyping(false);
+          setMessages((prev) => [...prev, { ...bubble, showAvatar: false, role: 'model' }]);
+          await sleep(160);
+          if (cancelled) return;
+        }
+
+        // Then hand over to the scripted scenario below it.
+        setMessages((prev) => [
+          ...prev,
+          { id: `divider-${scenario}`, type: 'divider', label: t.scenarios[scenario].title },
+        ]);
+        await sleep(300);
+        if (cancelled) return;
+      }
 
       let convo = [];
       try {
@@ -63,7 +129,9 @@ export default function CoachChatPanel({ className = '' }) {
     return () => {
       cancelled = true;
     };
-  }, [scenario, nonce]);
+    // `opening` is read but intentionally not a dependency — see openingKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenario, nonce, openingKey]);
 
   /* Keep the newest message in view. */
   useEffect(() => {
