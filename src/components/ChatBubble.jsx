@@ -2,10 +2,8 @@ import Icon from './Icon';
 import { toneToStatus } from '../utils/verdict';
 
 /* =============================================================================
- * ChatBubble — a single proactive agent message (left-aligned).
- * Colour follows the message `tone` (reassuring/calm/info/warning) mapped to a
- * semantic status. "Wait" is calm amber and fee warnings are a clear-but-soft
- * red — never alarming. The agent avatar shows only on the first of a group.
+ * ChatBubble — a single message bubble. Supports proactive agent messages 
+ * (left-aligned) and user messages (right-aligned).
  * ===========================================================================*/
 
 const BUBBLE = {
@@ -13,6 +11,7 @@ const BUBBLE = {
   neutral: 'bg-surface-container-lowest border-outline-variant/40',
   wait: 'bg-wait-container/50 border-wait/25',
   warn: 'bg-warn-container/40 border-warn/25',
+  user: 'bg-secondary border-secondary text-on-secondary',
 };
 const ACCENT = {
   good: 'bg-good',
@@ -21,11 +20,26 @@ const ACCENT = {
   warn: 'bg-warn',
 };
 
-export default function ChatBubble({ message, tone = 'info', showAvatar = true, time }) {
-  const status = toneToStatus(tone);
+export default function ChatBubble({ message, tone = 'info', showAvatar = true, time, isUser = false }) {
+  const status = isUser ? 'user' : toneToStatus(tone);
+
+  if (isUser) {
+    return (
+      <div className="flex max-w-[88%] items-end gap-3 self-end md:max-w-2xl">
+        <div className="relative overflow-hidden rounded-2xl rounded-tr-sm border p-4 shadow-soft bg-primary border-primary text-on-primary">
+          <p className="font-body-md text-on-primary">{message}</p>
+          {time && (
+            <span className="mt-2 block font-label-sm text-label-sm font-normal text-on-primary/80">
+              {time}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex max-w-[88%] items-start gap-3 md:max-w-2xl">
+    <div className="flex max-w-[88%] items-start gap-3 self-start md:max-w-2xl">
       {/* Avatar (or spacer to keep alignment for grouped bubbles) */}
       <div
         className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full ${
@@ -59,3 +73,4 @@ export default function ChatBubble({ message, tone = 'info', showAvatar = true, 
     </div>
   );
 }
+
