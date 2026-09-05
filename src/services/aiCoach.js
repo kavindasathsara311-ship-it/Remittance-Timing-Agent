@@ -85,3 +85,38 @@ ${contextStr}
     return fallbackMsg;
   }
 }
+
+export async function getDynamicTrendInterpretation(fxHistory, currentRate) {
+  if (!ai) {
+    return null; // Return null so Dashboard falls back to static message
+  }
+
+  try {
+    const historyData = fxHistory.map(d => `${d.date}: ${d.rate}`).join(', ');
+    const systemInstruction = `
+You are a quantitative FinTech analyst speaking plainly to a non-technical family in Sri Lanka.
+Your goal is to analyze the numeric trajectory of the exchange rate over the past 30 days.
+Identify if it is peaking, dropping, or stable compared to the 30-day average.
+
+Input Data:
+- Today's Rate: ${currentRate}
+- 30-Day History (Oldest to Newest): ${historyData}
+
+Return strictly a 1-2 sentence plain-language explanation of the trend (e.g., "Rates have steadily dipped 2% over the past three days, but are still above the monthly average.").
+Do NOT return JSON. Do NOT use markdown formatting.
+    `.trim();
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: [{ role: 'user', parts: [{ text: "Please interpret this trend." }] }],
+      config: {
+        systemInstruction: systemInstruction,
+      }
+    });
+
+    return response.text;
+  } catch (error) {
+    console.error("Gemini API Error (Trend):", error);
+    return null; // Return null so Dashboard falls back to static message
+  }
+}
