@@ -23,6 +23,18 @@ import {
  * place), not from the mock module directly. */
 export { CURRENCY_PAIRS, DEFAULT_PAIR } from './mockData';
 
+import AllRatesToday from '@allratestoday/sdk';
+
+let ratesClient = null;
+try {
+  const apiKey = import.meta.env.VITE_ALLRATESTODAY_API_KEY;
+  if (apiKey) {
+    ratesClient = new AllRatesToday({ apiKey });
+  }
+} catch (e) {
+  console.warn("Could not initialize AllRatesToday client:", e);
+}
+
 /* ── THE ONE-LINE SWITCH ─────────────────────────────────────────────────── */
 export const USE_MOCK_DATA = true;
 /* ─────────────────────────────────────────────────────────────────────────── */
@@ -60,6 +72,21 @@ async function request(path, params = {}) {
 export async function getFxHistory(pair = DEFAULT_PAIR, days = 30) {
   if (USE_MOCK_DATA) {
     await simulateLatency();
+
+    if (ratesClient) {
+      try {
+        const sourceCurrency = pair.split('_')[0];
+        const historyData = await ratesClient.getHistoricalRates(sourceCurrency, 'LKR', `${days}d`);
+        return historyData.map(item => ({
+          date: item.date || item.timestamp,
+          rate: Number(item.rate || item.value)
+        }));
+      } catch (e) {
+        console.error("AllRatesToday API Error (getFxHistory):", e);
+        // Fall back to mock data
+      }
+    }
+
     return getMockFxHistory(pair, days);
   }
   return request('/api/fx-history', { pair, days });
@@ -73,6 +100,36 @@ export async function getFxHistory(pair = DEFAULT_PAIR, days = 30) {
 export async function getRecommendation(pair = DEFAULT_PAIR) {
   if (USE_MOCK_DATA) {
     await simulateLatency();
+
+    if (ratesClient) {
+      try {
+        const sourceCurrency = pair.split('_')[0];
+        const currentData = await ratesClient.getRate(sourceCurrency, 'LKR');
+        const currentRate = typeof currentData === 'number' ? currentData : Number(currentData.rate || currentData.value);
+
+        const historyData = await ratesClient.getHistoricalRates(sourceCurrency, 'LKR', '7d');
+        const last7 = historyData.map(item => Number(item.rate || item.value));
+        const avgRate7d = Math.round((last7.reduce((s, r) => s + r, 0) / last7.length) * 100) / 100;
+
+        let percentDiff = 0;
+        if (avgRate7d !== 0) {
+          percentDiff = Math.round(((currentRate - avgRate7d) / avgRate7d) * 10000) / 100;
+        }
+
+        let verdict = 'NEUTRAL';
+        if (percentDiff >= 0.8) verdict = 'CONVERT_NOW';
+        else if (percentDiff <= -0.8) verdict = 'WAIT';
+
+        const abs = Math.abs(percentDiff);
+        const confidence = abs >= 1.5 ? 'high' : abs >= 0.8 ? 'medium' : 'low';
+
+        return { verdict, currentRate, avgRate7d, percentDiff, confidence };
+      } catch (e) {
+        console.error("AllRatesToday API Error (getRecommendation):", e);
+        // Fall back to mock data
+      }
+    }
+
     return getMockRecommendation(pair);
   }
   return request('/api/recommendation', { pair });
