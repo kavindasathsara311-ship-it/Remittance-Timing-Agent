@@ -79,10 +79,19 @@ export async function getFxHistory(pair = DEFAULT_PAIR, days = 30) {
       
       if (res.ok) {
         const { data } = await res.json();
+        
+        // If the key is invalid, the API might return an error object with status 200.
+        // We must ensure the data is actually an array before mapping it.
+        if (!Array.isArray(data)) {
+          throw new Error('AllRatesToday returned an invalid data shape (likely missing/invalid API key).');
+        }
+
         return data.map(item => ({
           date: item.date || item.timestamp,
           rate: Number(item.rate || item.value)
         }));
+      } else {
+         throw new Error(`Proxy responded with ${res.status}`);
       }
     } catch (e) {
       console.error("AllRatesToday Proxy Error (getFxHistory):", e);
@@ -125,9 +134,14 @@ export async function getRecommendation(pair = DEFAULT_PAIR) {
         const historyJson = await historyRes.json();
         
         const currentData = currentJson.data;
-        const currentRate = typeof currentData === 'number' ? currentData : Number(currentData.rate || currentData.value);
-
         const historyData = historyJson.data;
+
+        // Ensure we actually got the numeric rate and the array of history
+        if (!currentData || !Array.isArray(historyData)) {
+          throw new Error('AllRatesToday returned an invalid data shape (likely missing/invalid API key).');
+        }
+
+        const currentRate = typeof currentData === 'number' ? currentData : Number(currentData.rate || currentData.value);
         const last7 = historyData.map(item => Number(item.rate || item.value));
         const avgRate7d = Math.round((last7.reduce((s, r) => s + r, 0) / last7.length) * 100) / 100;
 
@@ -144,6 +158,8 @@ export async function getRecommendation(pair = DEFAULT_PAIR) {
         const confidence = abs >= 1.5 ? 'high' : abs >= 0.8 ? 'medium' : 'low';
 
         return { verdict, currentRate, avgRate7d, percentDiff, confidence };
+      } else {
+        throw new Error('Proxy responded with non-200 status');
       }
     } catch (e) {
       console.error("AllRatesToday Proxy Error (getRecommendation):", e);
