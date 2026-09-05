@@ -113,12 +113,21 @@ export function getMockFxHistory(pair = DEFAULT_PAIR, days = 30) {
  * GET /api/recommendation?pair=USD_LKR
  * Derived from the mock history so the numbers always agree with the chart.
  */
-export function getMockRecommendation(pair = DEFAULT_PAIR) {
-  const history = getMockFxHistory(pair, 30);
+export function getMockRecommendation(pair = DEFAULT_PAIR, historyOverride) {
+  const history = historyOverride !== undefined ? historyOverride : getMockFxHistory(pair, 30);
+  
+  if (!history || history.length === 0) {
+    return { verdict: 'NEUTRAL', currentRate: 0, avgRate7d: 0, percentDiff: 0, confidence: 'low' };
+  }
+  
   const currentRate = history[history.length - 1].rate;
   const last7 = history.slice(-7).map((d) => d.rate);
   const avgRate7d = round(last7.reduce((s, r) => s + r, 0) / last7.length, 2);
-  const percentDiff = round(((currentRate - avgRate7d) / avgRate7d) * 100, 2);
+  
+  let percentDiff = 0;
+  if (avgRate7d !== 0) {
+    percentDiff = round(((currentRate - avgRate7d) / avgRate7d) * 100, 2);
+  }
 
   let verdict = 'NEUTRAL';
   if (percentDiff >= 0.8) verdict = 'CONVERT_NOW';
@@ -139,23 +148,27 @@ export function getMockRecommendation(pair = DEFAULT_PAIR) {
  * Sorted best-first by effectiveRate. `flagged` marks high-fee (predatory)
  * channels. Also carries an `icon` + computed `receive` for the UI.
  */
-export function getMockChannels(amount = 500, pair = DEFAULT_PAIR) {
+export function getMockChannels(amount = 500, pair = DEFAULT_PAIR, templatesOverride) {
   const { currentRate } = getMockRecommendation(pair);
   const midMarketRate = currentRate;
+  const templates = templatesOverride || CHANNEL_TEMPLATES;
+  
+  const safeAmount = Number(amount) || 0;
 
-  return CHANNEL_TEMPLATES.map((tpl) => {
+  return templates.map((tpl) => {
     // Tiny per-pair fee jitter so tabs feel independently sourced.
     const jitter = ((PAIR_PROFILES[pair]?.seed || 7) % 3) * 0.05;
-    const feePercent = round(tpl.feePercent + jitter, 2);
+    const baseFee = tpl.feePercent !== undefined ? tpl.feePercent : 0;
+    const feePercent = round(baseFee + jitter, 2);
     const effectiveRate = round(midMarketRate * (1 - feePercent / 100), 2);
     return {
-      channel: tpl.channel,
-      icon: tpl.icon,
+      channel: tpl.channel || 'Unknown',
+      icon: tpl.icon || 'public',
       effectiveRate,
       midMarketRate,
       feePercent,
       flagged: feePercent >= FLAG_THRESHOLD,
-      receive: round(amount * effectiveRate, 2),
+      receive: round(safeAmount * effectiveRate, 2),
       gapFromMid: round(midMarketRate - effectiveRate, 2),
     };
   }).sort((a, b) => b.effectiveRate - a.effectiveRate);
