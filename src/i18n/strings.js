@@ -173,6 +173,19 @@ const en = {
     note: 'Sample records for demonstration.',
   },
 
+  pattern: {
+    title: 'Family Remittance Pattern',
+    subtitle: 'AI-analyzed insights based on your family’s transfer timing and history',
+    avgInterval: 'Average transfer gap',
+    avgIntervalUnit: 'days between transfers',
+    conversionTime: 'Conversion timing',
+    conversionTimeUnit: 'days to convert/spend',
+    nextExpected: 'Likely next transfer',
+    topChannelLabel: 'Preferred channel',
+    insufficientData: 'Not enough past transfer history to detect a pattern yet. Add more transfers to unlock behavior insights!',
+    aiInsightTitle: 'Coach Insight',
+  },
+
   footer: {
     disclaimer:
       'Remittance Coach is an educational tool. Rates and fees are estimates — always confirm with your provider before sending.',
