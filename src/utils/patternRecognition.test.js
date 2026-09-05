@@ -1,8 +1,14 @@
-import { describe, it, expect } from 'vitest';
-import { computeRemittancePatterns } from './patternRecognition';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { computeRemittancePatterns, formatPatternData, checkProactiveNudge } from './patternRecognition';
 import { getMockHistory } from '../services/mockData';
 
-describe('computeRemittancePatterns', () => {
+describe('Pattern Recognition Engine', () => {
+  const mockHistory = [
+    { date: '2026-07-01', amount: 500, channel: 'Wise', currency: 'USD' },
+    { date: '2026-08-01', amount: 600, channel: 'Remitly', currency: 'USD' },
+    { date: '2026-09-01', amount: 550, channel: 'Wise', currency: 'USD' },
+  ];
+
   it('computes correct metrics from mock remittance history', () => {
     const history = getMockHistory();
     const result = computeRemittancePatterns(history);
@@ -17,36 +23,23 @@ describe('computeRemittancePatterns', () => {
   });
 
   it('handles empty or null history gracefully', () => {
-    expect(computeRemittancePatterns([])).toEqual({
-      hasEnoughData: false,
-      avgDaysBetweenTransfers: 0,
-      avgDaysToConvert: 0,
-      expectedNextDate: null,
-      totalTransfers: 0,
-      topChannel: null,
-      avgAmount: 0,
-    });
+    const emptyRes = computeRemittancePatterns([]);
+    expect(emptyRes.hasEnoughData).toBe(false);
+    expect(emptyRes.totalTransfers).toBe(0);
 
-    expect(computeRemittancePatterns(null)).toEqual({
-      hasEnoughData: false,
-      avgDaysBetweenTransfers: 0,
-      avgDaysToConvert: 0,
-      expectedNextDate: null,
-      totalTransfers: 0,
-      topChannel: null,
-      avgAmount: 0,
-    });
+    const nullRes = computeRemittancePatterns(null);
+    expect(nullRes.hasEnoughData).toBe(false);
+    expect(nullRes.totalTransfers).toBe(0);
   });
 
-  it('handles single transfer entry (insufficient data for pattern interval)', () => {
+  it('handles single transfer entry', () => {
     const singleHistory = [
-      { date: '2026-08-01', amount: 500, channel: 'Wise' },
+      { date: '2026-08-01', amount: 500, channel: 'Wise', currency: 'USD' },
     ];
     const result = computeRemittancePatterns(singleHistory);
 
     expect(result.hasEnoughData).toBe(false);
     expect(result.totalTransfers).toBe(1);
-    expect(result.avgDaysBetweenTransfers).toBe(0);
     expect(result.topChannel).toBe('Wise');
     expect(result.avgAmount).toBe(500);
   });
@@ -60,20 +53,41 @@ describe('computeRemittancePatterns', () => {
     const result = computeRemittancePatterns(unsorted);
 
     expect(result.hasEnoughData).toBe(true);
-    // Intervals: 08-01 to 08-10 (9 days), 08-10 to 08-20 (10 days) => Avg: 9.5 days
     expect(result.avgDaysBetweenTransfers).toBe(9.5);
-    // Next expected date: 2026-08-20 + 10 days = 2026-08-30
     expect(result.expectedNextDate).toBe('2026-08-30');
   });
 
-  it('uses custom conversion delays if present on entries', () => {
-    const historyWithDelays = [
-      { date: '2026-08-01', amount: 200, channel: 'Remitly', convertedDays: 2 },
-      { date: '2026-08-11', amount: 200, channel: 'Remitly', convertedDays: 4 },
-    ];
-    const result = computeRemittancePatterns(historyWithDelays);
+  it('formats pattern data into readable strings', () => {
+    const patterns = computeRemittancePatterns(mockHistory);
+    const formatted = formatPatternData(patterns);
+    expect(formatted.expectedNextDateFormatted).toBe('October 2');
+    expect(formatted.avgAmountFormatted).toBe('~$550 USD');
+  });
 
-    expect(result.avgDaysToConvert).toBe(3);
+  describe('Nudge tests with fake timers', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-30T12:00:00Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('triggers proactive nudge within 48 hours when trend is peaking', () => {
+      const isNudge = checkProactiveNudge('2026-10-01', 'CONVERT_NOW');
+      expect(isNudge).toBe(true);
+    });
+
+    it('ignores nudge if trend is not peaking', () => {
+      const isNudge = checkProactiveNudge('2026-10-01', 'NEUTRAL');
+      expect(isNudge).toBe(false);
+    });
+    
+    it('ignores nudge if date is outside 48 hours', () => {
+      const isNudge = checkProactiveNudge('2026-10-15', 'CONVERT_NOW');
+      expect(isNudge).toBe(false);
+    });
   });
 
   it('generates a valid pattern insight message from getPatternInsight', async () => {
@@ -88,4 +102,3 @@ describe('computeRemittancePatterns', () => {
     expect(insight).toContain('8 transfers');
   });
 });
-

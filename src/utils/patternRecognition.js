@@ -16,26 +16,43 @@
  *   expectedNextDate: string | null,
  *   totalTransfers: number,
  *   topChannel: string | null,
- *   avgAmount: number
+ *   avgAmount: number,
+ *   currency?: string
  * }}
  */
 export function computeRemittancePatterns(history) {
-  if (!Array.isArray(history) || history.length < 2) {
+  if (!Array.isArray(history) || history.length === 0) {
     return {
       hasEnoughData: false,
       avgDaysBetweenTransfers: 0,
       avgDaysToConvert: 0,
       expectedNextDate: null,
-      totalTransfers: Array.isArray(history) ? history.length : 0,
-      topChannel: Array.isArray(history) && history.length === 1 ? history[0].channel || null : null,
-      avgAmount: Array.isArray(history) && history.length === 1 ? Number(history[0].amount) || 0 : 0,
+      totalTransfers: 0,
+      topChannel: null,
+      avgAmount: 0,
+      currency: 'USD',
     };
   }
 
-  // 1. Sort records chronologically (oldest -> newest)
+  if (history.length === 1) {
+    const single = history[0];
+    const nextD = new Date(new Date(single.date).getTime() + 30 * 24 * 60 * 60 * 1000);
+    return {
+      hasEnoughData: false,
+      avgDaysBetweenTransfers: 30,
+      avgDaysToConvert: 2,
+      expectedNextDate: nextD.toISOString().slice(0, 10),
+      totalTransfers: 1,
+      topChannel: single.channel || null,
+      avgAmount: Number(single.amount) || 0,
+      currency: single.currency || 'USD',
+    };
+  }
+
+  // Sort records chronologically (oldest -> newest)
   const sorted = [...history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  // 2. Compute intervals between consecutive transfers (in days)
+  // Compute intervals between consecutive transfers (in days)
   const intervals = [];
   for (let i = 1; i < sorted.length; i++) {
     const prevDate = new Date(sorted[i - 1].date);
@@ -48,8 +65,7 @@ export function computeRemittancePatterns(history) {
   const totalIntervalDays = intervals.reduce((sum, days) => sum + days, 0);
   const avgDaysBetweenTransfers = Math.round((totalIntervalDays / intervals.length) * 10) / 10;
 
-  // 3. Compute average days to convert (if convertedDays/processingDays exists on entries, use it;
-  // otherwise, default to a standard 1.5-day processing/conversion time across digital channels).
+  // Compute average days to convert
   const conversionDelays = sorted
     .map(entry => entry.convertedDays ?? entry.processingDays)
     .filter(val => typeof val === 'number');
@@ -58,13 +74,13 @@ export function computeRemittancePatterns(history) {
     ? Math.round((conversionDelays.reduce((s, v) => s + v, 0) / conversionDelays.length) * 10) / 10
     : 1.5;
 
-  // 4. Calculate projected next transfer date based on latest date + avg interval
+  // Calculate projected next transfer date based on latest date + avg interval
   const latestDate = new Date(sorted[sorted.length - 1].date);
   const nextDate = new Date(latestDate.getTime());
   nextDate.setDate(nextDate.getDate() + Math.round(avgDaysBetweenTransfers));
   const expectedNextDate = nextDate.toISOString().slice(0, 10);
 
-  // 5. Aggregate channel frequency & average amount
+  // Aggregate channel frequency & average amount
   const channelCounts = {};
   let totalAmount = 0;
 
@@ -95,5 +111,37 @@ export function computeRemittancePatterns(history) {
     totalTransfers: sorted.length,
     topChannel,
     avgAmount,
+    currency: sorted[0]?.currency || 'USD',
   };
+}
+
+export function formatPatternData(patternData) {
+  if (!patternData || !patternData.expectedNextDate) return null;
+
+  const dateObj = new Date(patternData.expectedNextDate);
+  const formattedDate = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric' }).format(dateObj);
+
+  return {
+    ...patternData,
+    expectedNextDateFormatted: formattedDate,
+    avgAmountFormatted: `~$${patternData.avgAmount} ${patternData.currency || 'USD'}`
+  };
+}
+
+export function checkProactiveNudge(expectedNextDate, currentTrend) {
+  if (!expectedNextDate) return false;
+  
+  const nextDate = new Date(expectedNextDate);
+  const today = new Date();
+  
+  // Difference in hours
+  const diffTime = nextDate.getTime() - today.getTime();
+  const diffHours = diffTime / (1000 * 60 * 60);
+  
+  // Within a 48 hour window (+/-) and trend is peaking
+  if (Math.abs(diffHours) <= 48 && currentTrend === 'CONVERT_NOW') {
+    return true;
+  }
+  
+  return false;
 }

@@ -1,4 +1,5 @@
 import { getMockRecommendation, getMockChannels, DEFAULT_PAIR } from './mockData';
+import { calculateEffectiveRates } from '../utils/channelComparison';
 
 /**
  * Sends prompt payload to the serverless backend function (/api/coach).
@@ -152,5 +153,42 @@ Pattern Details:
   } catch (error) {
     console.warn("Pattern API unavailable, using fallback:", error.message);
     return fallbackInsight;
+  }
+}
+
+export async function getChannelComparisonInsight(sendAmount, channelsData) {
+  if (!channelsData || channelsData.length === 0) {
+    return null;
+  }
+
+  try {
+    const { sortedChannels, bestChannel } = calculateEffectiveRates(sendAmount, channelsData);
+    
+    // Pick top 3 for the AI context to keep it concise
+    const topChannels = sortedChannels.slice(0, 3).map(ch => 
+      `${ch.channel}: Flat Fee = ${ch.flatFee}, % Fee = ${ch.feePercent}%, Offered Rate = ${ch.offeredRate}, Final Payout = ${ch.finalPayout} LKR`
+    ).join(' | ');
+
+    const systemInstruction = `
+You are a helpful, plain-English financial coach for Sri Lankan families.
+Your goal is to explain why a specific remittance channel is the best option for a given send amount, mathematically.
+
+Input Data:
+- Send Amount: ${sendAmount}
+- Best Channel: ${bestChannel.channel} (Payout: ${bestChannel.finalPayout} LKR)
+- Top Channels Data: ${topChannels}
+
+Task:
+Explain exactly WHY the best channel won for this specific amount. Specifically highlight if a competing channel looks cheap (e.g., "zero fees") but loses money due to a high exchange rate margin.
+Return a strict 2-3 sentence explanation. Do NOT use markdown formatting or tables. Keep it conversational.
+    `.trim();
+
+    return await callCoachApi({
+      systemInstruction,
+      userMessage: "Explain the best channel comparison.",
+    });
+  } catch (error) {
+    console.warn("Gemini API Error (Channel Comparison):", error.message);
+    return null; // Return null for graceful fallback
   }
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import ProactiveNudgeCard from '../agent/ProactiveNudgeCard';
 import VerdictCard from '../components/VerdictCard';
 import CurrencyTabs from '../components/CurrencyTabs';
 import FxTrendChart from '../components/FxTrendChart';
@@ -9,26 +10,39 @@ import {
   getFxHistory,
   getChannels,
   getCoachMessage,
+  getHistory,
   CURRENCY_PAIRS,
   DEFAULT_PAIR,
 } from '../services/api';
 import { getDynamicTrendInterpretation } from '../services/aiCoach';
 import { getVerdictMeta } from '../utils/verdict';
+import { computeRemittancePatterns } from '../utils/patternRecognition';
 
 /* =============================================================================
  * Dashboard — the default landing screen.
- * Order mirrors the design: verdict → currency selector → 30-day trend →
- * a compact channel comparison that links through to the full Channels page.
+ * Order mirrors the design: the agent's proactive nudge (when it has something
+ * worth saying) → verdict → currency selector → 30-day trend → a compact channel
+ * comparison that links through to the full Channels page.
+ *
+ * The nudge deliberately comes first and is NOT keyed to the selected tab: it
+ * talks about the corridor this family actually uses, which is the difference
+ * between an agent and a dashboard that only answers when asked.
+ *
  * All data flows through src/services/api.js (mock or live, transparently).
  * ===========================================================================*/
 export default function Dashboard() {
   const [pair, setPair] = useState(DEFAULT_PAIR);
   const [aiTrendText, setAiTrendText] = useState("Analyzing trend...");
-  const PREVIEW_AMOUNT = 500;
+  
+  // Fetch history to get the user's personal avgAmount for comparisons
+  const { data: historyData } = useAsync(() => getHistory(), []);
+  const patterns = historyData ? computeRemittancePatterns(historyData) : null;
+  const avgAmount = patterns?.avgAmount || 500;
 
   const rec = useAsync(() => getRecommendation(pair), [pair]);
   const fx = useAsync(() => getFxHistory(pair, 30), [pair]);
-  const channels = useAsync(() => getChannels(PREVIEW_AMOUNT, pair), [pair]);
+  // Re-fetch channels if pair or user's avgAmount changes
+  const channels = useAsync(() => getChannels(avgAmount, pair), [avgAmount, pair]);
 
   // The coaching one-liner depends on the verdict, so derive the scenario first.
   const scenario = rec.data ? getVerdictMeta(rec.data.verdict).scenario : 'good_time';
@@ -53,6 +67,8 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col gap-stack-lg">
+      <ProactiveNudgeCard />
+
       <VerdictCard
         recommendation={rec.data}
         message={aiTrendText || coach.data?.message}
@@ -77,6 +93,7 @@ export default function Dashboard() {
         onRetry={channels.reload}
         limit={3}
         viewAllTo="/channels"
+        sendAmount={avgAmount}
       />
     </div>
   );
