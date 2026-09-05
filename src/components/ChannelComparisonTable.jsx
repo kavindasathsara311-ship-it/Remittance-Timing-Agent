@@ -1,9 +1,11 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from './Icon';
 import StatusBadge from './ui/StatusBadge';
 import { LoadingBlock, ErrorBlock, EmptyBlock } from './ui/StateBlocks';
 import { formatRate } from '../utils/format';
 import { t } from '../i18n/strings';
+import { getChannelComparisonInsight } from '../services/aiCoach';
 
 /* =============================================================================
  * ChannelComparisonTable — channels sorted best-first by effective rate.
@@ -22,9 +24,27 @@ export default function ChannelComparisonTable({
   hint = t.dashboard.compareChannelsHint,
   viewAllTo,
   className = '',
+  sendAmount = 500, // Passed down from parent based on history
 }) {
   const rows = Array.isArray(channels) ? channels : [];
   const shown = limit ? rows.slice(0, limit) : rows;
+
+  const [aiInsight, setAiInsight] = useState(null);
+  const [isInsightLoading, setIsInsightLoading] = useState(false);
+
+  useEffect(() => {
+    if (channels && channels.length > 0) {
+      setIsInsightLoading(true);
+      let isCancelled = false;
+      getChannelComparisonInsight(sendAmount, channels).then(insight => {
+        if (!isCancelled) {
+          setAiInsight(insight);
+          setIsInsightLoading(false);
+        }
+      });
+      return () => { isCancelled = true; };
+    }
+  }, [channels, sendAmount]);
 
   return (
     <section className={`card card-pad ${className}`}>
@@ -42,6 +62,12 @@ export default function ChannelComparisonTable({
           {t.channels.sortHint}
         </span>
       </div>
+
+      {(isInsightLoading || aiInsight) && (
+        <div className="mb-4 rounded-lg bg-surface-variant p-4 text-on-surface-variant font-body-md">
+          {isInsightLoading ? "Comparing channel fees and margins..." : aiInsight}
+        </div>
+      )}
 
       {loading && <LoadingBlock />}
       {!loading && error && <ErrorBlock onRetry={onRetry} />}
