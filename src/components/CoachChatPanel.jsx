@@ -3,13 +3,14 @@ import ChatBubble from './ChatBubble';
 import ScenarioPicker from './ScenarioPicker';
 import Icon from './Icon';
 import { getConversation } from '../services/api';
+import { getCoachResponse } from '../services/aiCoach';
 import { t } from '../i18n/strings';
 
 /* =============================================================================
  * CoachChatPanel — the chat-style coach. The agent messages the family
  * proactively (no user input needed for MVP). Selecting a scenario replays that
- * conversation with a natural "typing" cadence. The composer is present for
- * fidelity but intentionally inert in the preview.
+ * conversation with a natural "typing" cadence. The composer is now interactive
+ * to allow free-form questions powered by Gemini.
  * ===========================================================================*/
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -19,6 +20,7 @@ export default function CoachChatPanel({ className = '' }) {
   const [nonce, setNonce] = useState(0); // bump to replay the same scenario
   const [messages, setMessages] = useState([]);
   const [typing, setTyping] = useState(false);
+  const [inputText, setInputText] = useState('');
 
   const scrollRef = useRef(null);
   const bottomRef = useRef(null);
@@ -30,7 +32,7 @@ export default function CoachChatPanel({ className = '' }) {
     const run = async () => {
       // Reset to greeting + a divider naming the scenario about to play.
       setMessages([
-        { id: 'intro', message: t.coach.introBubble, tone: 'info', showAvatar: true },
+        { id: 'intro', message: t.coach.introBubble, tone: 'info', showAvatar: true, role: 'model' },
         { id: `divider-${scenario}`, type: 'divider', label: t.scenarios[scenario].title },
       ]);
       setTyping(true);
@@ -50,7 +52,7 @@ export default function CoachChatPanel({ className = '' }) {
         await sleep(650 + Math.random() * 350);
         if (cancelled) return;
         setTyping(false);
-        setMessages((prev) => [...prev, { ...convo[i], showAvatar: false }]);
+        setMessages((prev) => [...prev, { ...convo[i], showAvatar: false, role: 'model' }]);
         await sleep(160);
         if (cancelled) return;
       }
@@ -71,6 +73,28 @@ export default function CoachChatPanel({ className = '' }) {
   const handleSelect = (key) => {
     if (key === scenario) setNonce((n) => n + 1); // replay same scenario
     else setScenario(key);
+  };
+
+  const handleSend = async (e) => {
+    e.preventDefault();
+    const text = inputText.trim();
+    if (!text) return;
+
+    setInputText('');
+    
+    // Add user message
+    const userMessageId = `user-${Date.now()}`;
+    setMessages(prev => [...prev, { id: userMessageId, message: text, role: 'user', tone: 'info', showAvatar: false }]);
+    
+    setTyping(true);
+    
+    // Call Gemini API
+    const responseText = await getCoachResponse(text, messages);
+    
+    setTyping(false);
+    
+    // Add coach message
+    setMessages(prev => [...prev, { id: `coach-${Date.now()}`, message: responseText, role: 'model', tone: 'info', showAvatar: false }]);
   };
 
   return (
@@ -116,6 +140,7 @@ export default function CoachChatPanel({ className = '' }) {
                 tone={m.tone}
                 showAvatar={m.showAvatar}
                 time={m.showAvatar ? t.common.justNow : undefined}
+                isUser={m.role === 'user'}
               />
             )
           )}
@@ -130,29 +155,28 @@ export default function CoachChatPanel({ className = '' }) {
         <div className="mx-auto flex max-w-3xl flex-col gap-3">
           <ScenarioPicker active={scenario} onSelect={handleSelect} />
 
-          <div className="flex items-center gap-2 rounded-xl border-2 border-outline-variant/40 bg-surface-container-lowest p-1.5 transition-colors focus-within:border-secondary/50">
+          <form onSubmit={handleSend} className="flex items-center gap-2 rounded-xl border-2 border-outline-variant/40 bg-surface-container-lowest p-1.5 transition-colors focus-within:border-secondary/50">
             <span className="p-2 text-outline">
               <Icon name="add_circle" className="text-[22px]" />
             </span>
             <input
               type="text"
-              disabled
-              placeholder={t.coach.placeholder}
-              className="w-full bg-transparent px-1 font-body-md text-on-surface outline-none placeholder:text-outline disabled:cursor-not-allowed"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder="Ask your coach anything..."
+              className="w-full bg-transparent px-1 font-body-md text-on-surface outline-none placeholder:text-outline"
             />
             <button
-              type="button"
-              disabled
-              title={t.coach.inputDisabledHint}
+              type="submit"
+              disabled={!inputText.trim() || typing}
               aria-label={t.coach.send}
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-secondary text-on-secondary opacity-60"
+              className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-secondary text-on-secondary ${
+                !inputText.trim() || typing ? 'opacity-60 cursor-not-allowed' : 'hover:bg-secondary/90 hover:shadow-md'
+              } transition-all`}
             >
               <Icon name="send" filled className="text-[20px]" />
             </button>
-          </div>
-          <p className="text-center font-label-sm text-label-sm font-normal text-on-surface-variant">
-            {t.coach.inputDisabledHint}
-          </p>
+          </form>
         </div>
       </div>
     </div>
@@ -181,3 +205,4 @@ function Dot({ delay }) {
     />
   );
 }
+
