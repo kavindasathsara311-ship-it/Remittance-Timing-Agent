@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
   if (!apiKey) {
     return res.status(500).json({ error: 'GEMINI_API_KEY environment variable is missing on server.' });
   }
@@ -24,13 +24,25 @@ export default async function handler(req, res) {
       { role: 'user', parts: [{ text: userMessage || 'Hello' }] }
     ];
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: payloadContents,
-      config: {
-        systemInstruction: systemInstruction || '',
-      },
-    });
+    let response;
+    try {
+      response = await ai.models.generateContent({
+        model: 'gemini-3.5-flash-lite',
+        contents: payloadContents,
+        config: {
+          systemInstruction: systemInstruction || '',
+        },
+      });
+    } catch (primaryErr) {
+      console.warn('Primary model error, trying fallback:', primaryErr.message);
+      response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: payloadContents,
+        config: {
+          systemInstruction: systemInstruction || '',
+        },
+      });
+    }
 
     return res.status(200).json({ text: response.text });
   } catch (error) {
