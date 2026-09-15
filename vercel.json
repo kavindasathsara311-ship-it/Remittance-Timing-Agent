@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/allrates",
+      "destination": "/api/allrates.js"
+    },
+    {
+      "source": "/api/coach",
+      "destination": "/api/coach.js"
+    }
+  ]
+}

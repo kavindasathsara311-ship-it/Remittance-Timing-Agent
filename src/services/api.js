@@ -17,11 +17,11 @@ import {
   getMockConversation,
   getMockHistory,
   DEFAULT_PAIR,
-} from './mockData';
+} from './mockData.js';
 
 /* Re-exported so the UI imports pair constants from the service layer (one
  * place), not from the mock module directly. */
-export { CURRENCY_PAIRS, DEFAULT_PAIR } from './mockData';
+export { CURRENCY_PAIRS, DEFAULT_PAIR } from './mockData.js';
 
 // We removed the client-side AllRatesToday initialization here to prevent CORS errors.
 // Live FX calls are now routed through the secure /api/allrates backend proxy.
@@ -80,18 +80,19 @@ export async function getFxHistory(pair = DEFAULT_PAIR, days = 30) {
       if (res.ok) {
         const { data } = await res.json();
         
-        // If the key is invalid, the API might return an error object with status 200.
-        // We must ensure the data is actually an array before mapping it.
-        if (!Array.isArray(data)) {
-          throw new Error('AllRatesToday returned an invalid data shape (likely missing/invalid API key).');
+        // Ensure data is array or extracted array
+        const historyList = Array.isArray(data) ? data : (data && Array.isArray(data.data) ? data.data : null);
+        if (!historyList) {
+          throw new Error('AllRatesToday returned invalid historical data shape.');
         }
 
-        return data.map(item => ({
+        return historyList.map(item => ({
           date: item.date || item.timestamp,
           rate: Number(item.rate || item.value)
         }));
       } else {
-         throw new Error(`Proxy responded with ${res.status}`);
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`Proxy responded with HTTP ${res.status}: ${errBody}`);
       }
     } catch (e) {
       console.error("AllRatesToday Proxy Error (getFxHistory):", e);
@@ -136,13 +137,17 @@ export async function getRecommendation(pair = DEFAULT_PAIR) {
         const currentData = currentJson.data;
         const historyData = historyJson.data;
 
+        const historyList = Array.isArray(historyData) ? historyData : (historyData && Array.isArray(historyData.data) ? historyData.data : null);
+
         // Ensure we actually got the numeric rate and the array of history
-        if (!currentData || !Array.isArray(historyData)) {
-          throw new Error('AllRatesToday returned an invalid data shape (likely missing/invalid API key).');
+        if (!currentData || !historyList) {
+          throw new Error('AllRatesToday returned an invalid data shape.');
         }
 
-        const currentRate = typeof currentData === 'number' ? currentData : Number(currentData.rate || currentData.value);
-        const last7 = historyData.map(item => Number(item.rate || item.value));
+        const rateObj = Array.isArray(currentData) ? currentData[0] : currentData;
+        const currentRate = typeof rateObj === 'number' ? rateObj : Number(rateObj.rate || rateObj.value);
+        const rateTimestamp = rateObj?.time || currentJson?.timestamp || new Date().toISOString();
+        const last7 = historyList.map(item => Number(item.rate || item.value));
         const avgRate7d = Math.round((last7.reduce((s, r) => s + r, 0) / last7.length) * 100) / 100;
 
         let percentDiff = 0;
@@ -157,9 +162,11 @@ export async function getRecommendation(pair = DEFAULT_PAIR) {
         const abs = Math.abs(percentDiff);
         const confidence = abs >= 1.5 ? 'high' : abs >= 0.8 ? 'medium' : 'low';
 
-        return { verdict, currentRate, avgRate7d, percentDiff, confidence };
+        return { verdict, currentRate, avgRate7d, percentDiff, confidence, rateTimestamp };
       } else {
-        throw new Error('Proxy responded with non-200 status');
+        const currentErr = !currentRes.ok ? await currentRes.text().catch(() => '') : '';
+        const historyErr = !historyRes.ok ? await historyRes.text().catch(() => '') : '';
+        throw new Error(`Proxy responded with error. currentRes HTTP ${currentRes.status}: ${currentErr} | historyRes HTTP ${historyRes.status}: ${historyErr}`);
       }
     } catch (e) {
       console.error("AllRatesToday Proxy Error (getRecommendation):", e);
@@ -177,9 +184,17 @@ export async function getRecommendation(pair = DEFAULT_PAIR) {
  *   feePercent:number, flagged:boolean}>>}
  */
 export async function getChannels(amount = 500, pair = DEFAULT_PAIR) {
+  let liveMidMarketRate;
+  try {
+    const rec = await getRecommendation(pair);
+    if (rec && rec.currentRate) {
+      liveMidMarketRate = rec.currentRate;
+    }
+  } catch (e) {}
+
   if (USE_MOCK_DATA) {
     await simulateLatency();
-    return getMockChannels(amount, pair);
+    return getMockChannels(amount, pair, undefined, liveMidMarketRate);
   }
   const data = await request('/api/channels', { amount, pair });
   // Live API may not include our UI-only helpers; derive them defensively.

@@ -105,13 +105,20 @@ export default function VerdictCard({ recommendation, message, pair, loading = f
         </div>
 
         {/* Detail line for the numbers-minded */}
-        <p className="font-label-md text-label-md font-normal text-on-surface-variant">
-          {t.dashboard.detailLine({
-            current: formatRate(recommendation.currentRate),
-            avg7d: formatRate(recommendation.avgRate7d),
-            diffLabel,
-          })}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2 font-label-md text-label-md font-normal text-on-surface-variant">
+          <p>
+            {t.dashboard.detailLine({
+              current: formatRate(recommendation.currentRate),
+              avg7d: formatRate(recommendation.avgRate7d),
+              diffLabel,
+            })}
+          </p>
+          {recommendation.rateTimestamp && (
+            <span className="text-xs text-on-surface-variant/70">
+              Updated: {new Date(recommendation.rateTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+          )}
+        </div>
       </div>
     </section>
   );

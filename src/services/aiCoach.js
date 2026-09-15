@@ -1,5 +1,5 @@
-import { getMockRecommendation, getMockChannels, DEFAULT_PAIR } from './mockData';
-import { calculateEffectiveRates } from '../utils/channelComparison';
+import { getRecommendation, getChannels, DEFAULT_PAIR } from './api.js';
+import { calculateEffectiveRates } from '../utils/channelComparison.js';
 
 /**
  * Sends prompt payload to the serverless backend function (/api/coach).
@@ -18,7 +18,7 @@ async function callCoachApi(payload) {
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Serverless API responded with ${res.status}`);
+    throw new Error(`[HTTP ${res.status}] ${errorData.error || 'Serverless Coach API request failed'}`);
   }
 
   const data = await res.json();
@@ -28,24 +28,26 @@ async function callCoachApi(payload) {
   return data.text;
 }
 
-export async function getCoachResponse(userMessage, conversationHistory = []) {
+export async function getCoachResponse(userMessage, conversationHistory = [], pair = DEFAULT_PAIR) {
+  let recommendation;
+  let channels = [];
   try {
-    // 1. Gather current context
-    const recommendation = getMockRecommendation(DEFAULT_PAIR);
-    const channels = getMockChannels(500, DEFAULT_PAIR); // Assuming 500 amount for context
+    // 1. Gather current REAL live market context from AllRatesToday API
+    recommendation = await getRecommendation(pair);
+    channels = await getChannels(500, pair);
     
     // Sort channels by effective rate to find the best and worst easily
-    const bestChannel = channels[0];
+    const bestChannel = channels[0] || {};
     const flaggedChannels = channels.filter(c => c.flagged);
     
     const contextStr = `
-Current Market Context (USD to LKR):
-- Today's Rate: ${recommendation.currentRate}
+Current Market Context (${pair.replace('_', ' to ')}):
+- Today's Live Rate: ${recommendation.currentRate}
 - 7-Day Average: ${recommendation.avgRate7d}
 - Trend Verdict: ${recommendation.verdict} (Difference: ${recommendation.percentDiff}%)
 
-Channel Information (for sending 500 USD):
-- Best Channel: ${bestChannel.channel} (Effective Rate: ${bestChannel.effectiveRate}, Fee: ${bestChannel.feePercent}%)
+Channel Information (for sending 500 ${pair.split('_')[0]}):
+- Best Channel: ${bestChannel.channel || 'Wise'} (Effective Rate: ${bestChannel.effectiveRate || recommendation.currentRate}, Fee: ${bestChannel.feePercent || 0.4}%)
 ${flaggedChannels.length > 0 ? `- Warning: Avoid ${flaggedChannels.map(c => c.channel).join(', ')} as their fees are above 2%.` : ''}
     `.trim();
 
@@ -75,12 +77,12 @@ ${contextStr}
     });
   } catch (error) {
     console.warn("Coach API unavailable, using fallback:", error.message);
-    // Graceful fallback
-    const recommendation = getMockRecommendation(DEFAULT_PAIR);
+    // Graceful fallback using recommendation if available
+    const rec = recommendation || { verdict: 'NEUTRAL' };
     let fallbackMsg = "I'm having a little trouble connecting right now, but I can still tell you that ";
-    if (recommendation.verdict === 'CONVERT_NOW') {
+    if (rec.verdict === 'CONVERT_NOW') {
       fallbackMsg += "rates are looking strong today compared to the last week. It's a good time to send!";
-    } else if (recommendation.verdict === 'WAIT') {
+    } else if (rec.verdict === 'WAIT') {
       fallbackMsg += "rates are a bit lower than average right now. You might want to wait a few days if you can.";
     } else {
       fallbackMsg += "rates are fairly average today. It's an okay time to send if you need to.";
