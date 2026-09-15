@@ -79,7 +79,6 @@ export async function getFxHistory(pair = DEFAULT_PAIR, days = 30) {
       
       if (res.ok) {
         const { data } = await res.json();
-        
         // If the key is invalid, the API might return an error object with status 200.
         // We must ensure the data is actually an array before mapping it.
         if (!Array.isArray(data)) {
@@ -91,7 +90,7 @@ export async function getFxHistory(pair = DEFAULT_PAIR, days = 30) {
           rate: Number(item.rate || item.value)
         }));
       } else {
-         throw new Error(`Proxy responded with ${res.status}`);
+        throw new Error(`Proxy responded with ${res.status}`);
       }
     } catch (e) {
       console.error("AllRatesToday Proxy Error (getFxHistory):", e);
@@ -177,12 +176,36 @@ export async function getRecommendation(pair = DEFAULT_PAIR) {
  *   feePercent:number, flagged:boolean}>>}
  */
 export async function getChannels(amount = 500, pair = DEFAULT_PAIR) {
+  const sourceCurrency = pair.split('_')[0];
+  const safeAmount = Number(amount) || 500;
+
+  try {
+    const res = await fetch('/api/channels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: safeAmount, pair, sourceCurrency, targetCurrency: 'LKR' }),
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      const channels = json.data?.channels || json.channels;
+      if (Array.isArray(channels)) {
+        return channels.map((c) => ({
+          ...c,
+          receive: c.receive ?? round(safeAmount * c.effectiveRate, 2),
+          gapFromMid: c.gapFromMid ?? round(c.midMarketRate - c.effectiveRate, 2),
+        }));
+      }
+    }
+  } catch (e) {
+    console.warn('Live API /api/channels proxy call failed, using fallback:', e);
+  }
+
   if (USE_MOCK_DATA) {
     await simulateLatency();
     return getMockChannels(amount, pair);
   }
   const data = await request('/api/channels', { amount, pair });
-  // Live API may not include our UI-only helpers; derive them defensively.
   return data.map((c) => ({
     ...c,
     receive: c.receive ?? round(amount * c.effectiveRate, 2),
@@ -217,17 +240,114 @@ export async function getConversation(scenario = 'good_time') {
   return [{ id: `${scenario}-1`, message: single.message, tone: single.tone }];
 }
 
+const HISTORY_STORAGE_KEY = 'remittance_history_v1';
+let inMemoryHistoryStore = null;
+
+function readStoredHistory() {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+      if (!raw) {
+        const seeded = getMockHistory();
+        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(seeded));
+        return seeded;
+      }
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : getMockHistory();
+    }
+  } catch {
+    /* ignore */
+  }
+  if (!inMemoryHistoryStore) {
+    inMemoryHistoryStore = getMockHistory();
+  }
+  return inMemoryHistoryStore;
+}
+
+function writeStoredHistory(history) {
+  inMemoryHistoryStore = history;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+    }
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('remittance-history-updated', { detail: history }));
+    }
+  } catch (e) {
+    console.error('Failed to write history to localStorage', e);
+  }
+}
+
 /**
  * Past remittance events for the History page.
- * NOTE: optional/nice-to-have — mock-only for now; wire to a real endpoint
- * (e.g. GET /api/history) when the backend provides one.
+ * Uses localStorage persistence seeded with mock data.
  */
 export async function getHistory() {
   if (USE_MOCK_DATA) {
     await simulateLatency();
-    return getMockHistory();
+    return readStoredHistory();
   }
-  return request('/api/history', {});
+  try {
+    const data = await request('/api/history', {});
+    return Array.isArray(data) ? data : readStoredHistory();
+  } catch (e) {
+    console.error('API getHistory error, falling back to local storage:', e);
+    return readStoredHistory();
+  }
+}
+
+export async function addHistoryRecord(record) {
+  const history = readStoredHistory();
+  const newRecord = {
+    id: `h_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+    date: record.date || new Date().toISOString().slice(0, 10),
+    amount: Number(record.amount) || 0,
+    currency: record.currency || 'USD',
+    senderCountry: record.senderCountry || 'United States',
+    channel: record.channel || 'Wise',
+    rate: Number(record.rate) || 0,
+    received: Number(record.received) || round((Number(record.amount) || 0) * (Number(record.rate) || 0), 2),
+    status: record.status || 'Completed',
+  };
+  const updated = [newRecord, ...history];
+  writeStoredHistory(updated);
+  return updated;
+}
+
+export async function updateHistoryRecord(id, updatedFields) {
+  const history = readStoredHistory();
+  const updated = history.map((item) => {
+    if (item.id === id) {
+      const amount = updatedFields.amount !== undefined ? Number(updatedFields.amount) : item.amount;
+      const rate = updatedFields.rate !== undefined ? Number(updatedFields.rate) : item.rate;
+      const received = updatedFields.received !== undefined 
+        ? Number(updatedFields.received) 
+        : round(amount * rate, 2);
+      return {
+        ...item,
+        ...updatedFields,
+        amount,
+        rate,
+        received,
+      };
+    }
+    return item;
+  });
+  writeStoredHistory(updated);
+  return updated;
+}
+
+export async function deleteHistoryRecord(id) {
+  const history = readStoredHistory();
+  const updated = history.filter((item) => item.id !== id);
+  writeStoredHistory(updated);
+  return updated;
+}
+
+export async function resetHistoryData() {
+  const seeded = getMockHistory();
+  writeStoredHistory(seeded);
+  return seeded;
 }
 
 /* ------------------------------------------------------------------------- */
