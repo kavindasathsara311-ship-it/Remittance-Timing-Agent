@@ -79,9 +79,12 @@ export async function getFxHistory(pair = DEFAULT_PAIR, days = 30) {
       
       if (res.ok) {
         const { data } = await res.json();
+        // If the key is invalid, the API might return an error object with status 200.
+        // We must ensure the data is actually an array before mapping it.
         if (!Array.isArray(data)) {
           throw new Error('AllRatesToday returned an invalid data shape (likely missing/invalid API key).');
         }
+
         return data.map(item => ({
           date: item.date || item.timestamp,
           rate: Number(item.rate || item.value)
@@ -154,6 +157,8 @@ export async function getRecommendation(pair = DEFAULT_PAIR) {
         const confidence = abs >= 1.5 ? 'high' : abs >= 0.8 ? 'medium' : 'low';
 
         return { verdict, currentRate, avgRate7d, percentDiff, confidence };
+      } else {
+        throw new Error('Proxy responded with non-200 status');
       }
     } catch (e) {
       console.error("AllRatesToday Proxy Error (getRecommendation):", e);
