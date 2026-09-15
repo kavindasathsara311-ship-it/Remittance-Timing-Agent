@@ -1,12 +1,5 @@
 /* =============================================================================
  * api.js — the ONLY file that talks to data.
- *
- *   ▸ Flip USE_MOCK_DATA to `false` to hit the real REST backend.
- *   ▸ Point it at the API by setting VITE_API_BASE_URL in a `.env` file
- *     (e.g. VITE_API_BASE_URL=http://localhost:3001). No other file changes.
- *
- * Every function returns the exact shape described in the backend contract, so
- * components never need to know whether they got mock or live data.
  * ===========================================================================*/
 
 import {
@@ -19,27 +12,18 @@ import {
   DEFAULT_PAIR,
 } from './mockData.js';
 
-/* Re-exported so the UI imports pair constants from the service layer (one
- * place), not from the mock module directly. */
 export { CURRENCY_PAIRS, DEFAULT_PAIR } from './mockData.js';
 
-// We removed the client-side AllRatesToday initialization here to prevent CORS errors.
-// Live FX calls are now routed through the secure /api/allrates backend proxy.
-
-/* ── THE ONE-LINE SWITCH ─────────────────────────────────────────────────── */
 export const USE_MOCK_DATA = true;
-/* ─────────────────────────────────────────────────────────────────────────── */
 
 const API_BASE =
   (import.meta.env?.VITE_API_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
 
-/** Small delay so mock mode still exercises loading states realistically. */
 function simulateLatency(min = 180, max = 420) {
   const ms = Math.floor(Math.random() * (max - min)) + min;
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Thin fetch wrapper with JSON parsing + error surface. */
 async function request(path, params = {}) {
   const url = new URL(`${API_BASE}${path}`);
   Object.entries(params).forEach(([k, v]) => {
@@ -56,10 +40,6 @@ async function request(path, params = {}) {
   return res.json();
 }
 
-/**
- * GET /api/fx-history?pair=USD_LKR&days=30
- * @returns {Promise<{date:string, rate:number}[]>}
- */
 export async function getFxHistory(pair = DEFAULT_PAIR, days = 30) {
   if (USE_MOCK_DATA) {
     await simulateLatency();
@@ -80,7 +60,6 @@ export async function getFxHistory(pair = DEFAULT_PAIR, days = 30) {
       if (res.ok) {
         const { data } = await res.json();
         
-        // Ensure data is array or extracted array
         const historyList = Array.isArray(data) ? data : (data && Array.isArray(data.data) ? data.data : null);
         if (!historyList) {
           throw new Error('AllRatesToday returned invalid historical data shape.');
@@ -96,7 +75,6 @@ export async function getFxHistory(pair = DEFAULT_PAIR, days = 30) {
       }
     } catch (e) {
       console.error("AllRatesToday Proxy Error (getFxHistory):", e);
-      // Fall back to mock data
     }
 
     return getMockFxHistory(pair, days);
@@ -104,11 +82,6 @@ export async function getFxHistory(pair = DEFAULT_PAIR, days = 30) {
   return request('/api/fx-history', { pair, days });
 }
 
-/**
- * GET /api/recommendation?pair=USD_LKR
- * @returns {Promise<{verdict:'WAIT'|'CONVERT_NOW'|'NEUTRAL', currentRate:number,
- *   avgRate7d:number, percentDiff:number, confidence:'high'|'medium'|'low'}>}
- */
 export async function getRecommendation(pair = DEFAULT_PAIR) {
   if (USE_MOCK_DATA) {
     await simulateLatency();
@@ -116,14 +89,12 @@ export async function getRecommendation(pair = DEFAULT_PAIR) {
     try {
       const sourceCurrency = pair.split('_')[0];
       
-      // Fetch current rate
       const currentRes = await fetch('/api/allrates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'getRate', sourceCurrency, targetCurrency: 'LKR' })
       });
       
-      // Fetch 7-day history
       const historyRes = await fetch('/api/allrates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -139,7 +110,6 @@ export async function getRecommendation(pair = DEFAULT_PAIR) {
 
         const historyList = Array.isArray(historyData) ? historyData : (historyData && Array.isArray(historyData.data) ? historyData.data : null);
 
-        // Ensure we actually got the numeric rate and the array of history
         if (!currentData || !historyList) {
           throw new Error('AllRatesToday returned an invalid data shape.');
         }
@@ -170,7 +140,6 @@ export async function getRecommendation(pair = DEFAULT_PAIR) {
       }
     } catch (e) {
       console.error("AllRatesToday Proxy Error (getRecommendation):", e);
-      // Fall back to mock data
     }
 
     return getMockRecommendation(pair);
@@ -178,11 +147,6 @@ export async function getRecommendation(pair = DEFAULT_PAIR) {
   return request('/api/recommendation', { pair });
 }
 
-/**
- * GET /api/channels?amount=500&pair=USD_LKR
- * @returns {Promise<Array<{channel:string, effectiveRate:number, midMarketRate:number,
- *   feePercent:number, flagged:boolean}>>}
- */
 export async function getChannels(amount = 500, pair = DEFAULT_PAIR) {
   let liveMidMarketRate;
   try {
@@ -197,7 +161,6 @@ export async function getChannels(amount = 500, pair = DEFAULT_PAIR) {
     return getMockChannels(amount, pair, undefined, liveMidMarketRate);
   }
   const data = await request('/api/channels', { amount, pair });
-  // Live API may not include our UI-only helpers; derive them defensively.
   return data.map((c) => ({
     ...c,
     receive: c.receive ?? round(amount * c.effectiveRate, 2),
@@ -205,10 +168,6 @@ export async function getChannels(amount = 500, pair = DEFAULT_PAIR) {
   }));
 }
 
-/**
- * GET /api/coach-message?scenario=good_time|bad_time|urgent|predatory_channel
- * @returns {Promise<{message:string, tone:string}>}
- */
 export async function getCoachMessage(scenario = 'good_time') {
   if (USE_MOCK_DATA) {
     await simulateLatency(120, 260);
@@ -217,12 +176,6 @@ export async function getCoachMessage(scenario = 'good_time') {
   return request('/api/coach-message', { scenario });
 }
 
-/**
- * Multi-turn demo conversation for the Coach/Chat view.
- * NOTE: not part of the core REST contract — in live mode we fall back to the
- * single coach-message endpoint and present it as one bubble.
- * @returns {Promise<Array<{id:string, message:string, tone:string}>>}
- */
 export async function getConversation(scenario = 'good_time') {
   if (USE_MOCK_DATA) {
     await simulateLatency(120, 260);
@@ -232,20 +185,64 @@ export async function getConversation(scenario = 'good_time') {
   return [{ id: `${scenario}-1`, message: single.message, tone: single.tone }];
 }
 
-/**
- * Past remittance events for the History page.
- * NOTE: optional/nice-to-have — mock-only for now; wire to a real endpoint
- * (e.g. GET /api/history) when the backend provides one.
- */
+let currentHistoryData = null;
+
 export async function getHistory() {
+  if (!currentHistoryData) {
+    currentHistoryData = getMockHistory();
+  }
   if (USE_MOCK_DATA) {
     await simulateLatency();
-    return getMockHistory();
+    return [...currentHistoryData];
   }
   return request('/api/history', {});
 }
 
-/* ------------------------------------------------------------------------- */
+export async function addHistoryRecord(record) {
+  if (!currentHistoryData) currentHistoryData = getMockHistory();
+  const rate = Number(record.rate) || 300;
+  const amount = Number(record.amount) || 0;
+  const newRecord = {
+    id: `h${Date.now()}`,
+    date: record.date || new Date().toISOString().slice(0, 10),
+    amount,
+    currency: record.currency || 'USD',
+    senderCountry: record.senderCountry || 'United States',
+    channel: record.channel || 'Wise',
+    rate,
+    received: Math.round(amount * rate * 100) / 100,
+    status: record.status || 'Completed',
+  };
+  currentHistoryData = [newRecord, ...currentHistoryData];
+  return [...currentHistoryData];
+}
+
+export async function updateHistoryRecord(id, updates) {
+  if (!currentHistoryData) currentHistoryData = getMockHistory();
+  currentHistoryData = currentHistoryData.map((item) => {
+    if (item.id === id) {
+      const updated = { ...item, ...updates };
+      const amount = Number(updated.amount);
+      const rate = Number(updated.rate);
+      updated.received = Math.round(amount * rate * 100) / 100;
+      return updated;
+    }
+    return item;
+  });
+  return [...currentHistoryData];
+}
+
+export async function deleteHistoryRecord(id) {
+  if (!currentHistoryData) currentHistoryData = getMockHistory();
+  currentHistoryData = currentHistoryData.filter((item) => item.id !== id);
+  return [...currentHistoryData];
+}
+
+export async function resetHistoryData() {
+  currentHistoryData = getMockHistory();
+  return [...currentHistoryData];
+}
+
 function round(value, dp = 2) {
   const f = 10 ** dp;
   return Math.round(value * f) / f;

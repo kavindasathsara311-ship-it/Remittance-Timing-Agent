@@ -8,7 +8,6 @@ function generateFallbackCoachResponse(userMessage = '', systemInstruction = '')
   const query = userMessage.toLowerCase();
   const instruction = systemInstruction.toLowerCase();
 
-  // Detect active currency pair rate
   let currentRate = 328.5;
   let currSymbol = 'USD';
 
@@ -64,7 +63,7 @@ export default async function handler(req, res) {
   }
 
   const { systemInstruction, userMessage, contents } = req.body || {};
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 
   if (apiKey) {
     const ai = new GoogleGenAI({ apiKey });

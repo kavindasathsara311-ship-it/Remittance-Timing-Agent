@@ -60,17 +60,18 @@ async function fetchRealHistoricalRates(sourceCurrency, targetCurrency = 'LKR', 
 /**
  * Vercel Serverless Function: /api/allrates
  * 
- * Returns full precision real-time exchange rates and exact timestamps.
+ * Proxies live exchange rate queries. Uses AllRatesToday SDK when API key is set,
+ * with automatic fallback to real-time full-precision live and historical data.
  */
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { action, sourceCurrency, targetCurrency = 'LKR', period } = req.body || {};
+  const { action, sourceCurrency = 'USD', targetCurrency = 'LKR', period = '30d' } = req.body || {};
 
-  if (!action || !sourceCurrency) {
-    return res.status(400).json({ error: 'Missing required parameters (action, sourceCurrency)' });
+  if (!action) {
+    return res.status(400).json({ error: 'Missing required parameter: action' });
   }
 
   const apiKey = process.env.VITE_ALLRATESTODAY_API_KEY || process.env.ALLRATESTODAY_API_KEY;
@@ -85,9 +86,6 @@ export default async function handler(req, res) {
         rawData = await ratesClient.getRate(sourceCurrency, targetCurrency);
         data = Array.isArray(rawData) ? rawData[0] : rawData;
       } else if (action === 'getHistoricalRates') {
-        if (!period) {
-          return res.status(400).json({ error: 'Missing required parameter: period' });
-        }
         rawData = await ratesClient.getHistoricalRates(sourceCurrency, targetCurrency, period);
         data = (rawData && Array.isArray(rawData.data)) ? rawData.data : (Array.isArray(rawData) ? rawData : rawData);
       }
