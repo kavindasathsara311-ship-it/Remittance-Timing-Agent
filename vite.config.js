@@ -2,7 +2,6 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import coachHandler from './api/coach.js';
 import allratesHandler from './api/allrates.js';
-import channelsHandler from './api/channels.js';
 
 function apiDevPlugin() {
   return {
@@ -10,8 +9,7 @@ function apiDevPlugin() {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = req.url?.split('?')[0];
-        if (url === '/api/coach' || url === '/api/allrates' || url === '/api/channels') {
-          // Sync environment variables from .env files
+        if (url === '/api/coach' || url === '/api/allrates') {
           const env = loadEnv(server.config.mode, process.cwd(), '');
           const geminiKey = env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY;
           if (geminiKey) {
@@ -35,7 +33,6 @@ function apiDevPlugin() {
               req.body = {};
             }
 
-            // Decorate res with Express/Vercel compatibility helpers
             res.status = function (code) {
               this.statusCode = code;
               return this;
@@ -53,8 +50,6 @@ function apiDevPlugin() {
                 await coachHandler(req, res);
               } else if (url === '/api/allrates') {
                 await allratesHandler(req, res);
-              } else if (url === '/api/channels') {
-                await channelsHandler(req, res);
               }
             } catch (err) {
               console.error(`Dev API error on ${url}:`, err);
@@ -79,4 +74,3 @@ export default defineConfig({
     open: false,
   },
 });
-

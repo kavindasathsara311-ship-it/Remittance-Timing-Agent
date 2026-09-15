@@ -19,10 +19,10 @@ export const DEFAULT_PAIR = 'USD_LKR';
  * `targetPct` shapes the most recent week so the four tabs demonstrate a spread
  * of verdicts: USD good/high, SAR wait/high, AED neutral/low, GBP good/medium. */
 const PAIR_PROFILES = {
-  USD_LKR: { base: 302, drift: 0.62, amplitude: 1.8, period: 12, phase: 0.6, seed: 11, targetPct: 1.6 },
-  SAR_LKR: { base: 82.5, drift: -0.02, amplitude: 0.5, period: 10, phase: 1.1, seed: 23, targetPct: -1.7 },
-  AED_LKR: { base: 83.2, drift: 0.01, amplitude: 0.4, period: 11, phase: 2.0, seed: 37, targetPct: 0.15 },
-  GBP_LKR: { base: 392, drift: 0.5, amplitude: 2.6, period: 13, phase: 0.2, seed: 51, targetPct: 0.9 },
+  USD_LKR: { base: 329.7, drift: 0.62, amplitude: 1.8, period: 12, phase: 0.6, seed: 11, targetPct: 1.6 },
+  SAR_LKR: { base: 87.9, drift: -0.02, amplitude: 0.5, period: 10, phase: 1.1, seed: 23, targetPct: -1.7 },
+  AED_LKR: { base: 89.7, drift: 0.01, amplitude: 0.4, period: 11, phase: 2.0, seed: 37, targetPct: 0.15 },
+  GBP_LKR: { base: 428.5, drift: 0.5, amplitude: 2.6, period: 13, phase: 0.2, seed: 51, targetPct: 0.9 },
 };
 
 /* Fee templates for known channels. `feePercent` drives effectiveRate and the
@@ -148,9 +148,9 @@ export function getMockRecommendation(pair = DEFAULT_PAIR, historyOverride) {
  * Sorted best-first by effectiveRate. `flagged` marks high-fee (predatory)
  * channels. Also carries an `icon` + computed `receive` for the UI.
  */
-export function getMockChannels(amount = 500, pair = DEFAULT_PAIR, templatesOverride) {
+export function getMockChannels(amount = 500, pair = DEFAULT_PAIR, templatesOverride, liveMidMarketRate) {
   const { currentRate } = getMockRecommendation(pair);
-  const midMarketRate = currentRate;
+  const midMarketRate = liveMidMarketRate || currentRate;
   const templates = templatesOverride || CHANNEL_TEMPLATES;
   
   const safeAmount = Number(amount) || 0;

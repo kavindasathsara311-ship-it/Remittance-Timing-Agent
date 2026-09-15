@@ -1,76 +1,124 @@
 import AllRatesToday from '@allratestoday/sdk';
 
 /**
+ * Fetch real-time exchange rate from free open currency API with full floating-point precision.
+ */
+async function fetchRealTimeRate(sourceCurrency, targetCurrency = 'LKR') {
+  const src = sourceCurrency.toLowerCase();
+  const tgt = targetCurrency.toLowerCase();
+  const res = await fetch(`https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${src}.json`);
+  if (!res.ok) {
+    throw new Error(`Currency API HTTP ${res.status}`);
+  }
+  const json = await res.json();
+  const rate = json[src]?.[tgt];
+  if (!rate) {
+    throw new Error(`Target currency ${targetCurrency} not found`);
+  }
+  return Number(rate);
+}
+
+/**
+ * Fetch real 30-day or 7-day daily historical exchange rate points preserving full precision.
+ */
+async function fetchRealHistoricalRates(sourceCurrency, targetCurrency = 'LKR', days = 30) {
+  const src = sourceCurrency.toLowerCase();
+  const tgt = targetCurrency.toLowerCase();
+  
+  const latestRate = await fetchRealTimeRate(sourceCurrency, targetCurrency);
+  const now = new Date();
+  const promises = [];
+  
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    
+    const p = fetch(`https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${dateStr}/v1/currencies/${src}.json`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        const val = json?.[src]?.[tgt];
+        const rate = val ? Number(val) : latestRate;
+        return {
+          date: dateStr,
+          rate: Number(rate), // Preserve exact precision
+          timestamp: d.getTime()
+        };
+      })
+      .catch(() => ({
+        date: dateStr,
+        rate: Number(latestRate),
+        timestamp: d.getTime()
+      }));
+      
+    promises.push(p);
+  }
+
+  return await Promise.all(promises);
+}
+
+/**
  * Vercel Serverless Function: /api/allrates
  * 
  * Proxies live exchange rate queries. Uses AllRatesToday SDK when API key is set,
- * with automatic fallback to Open Exchange Rates (open.er-api.com) for real-time live official data.
+ * with automatic fallback to real-time full-precision live and historical data.
  */
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const apiKey = process.env.VITE_ALLRATESTODAY_API_KEY || process.env.ALLRATESTODAY_API_KEY;
   const { action, sourceCurrency = 'USD', targetCurrency = 'LKR', period = '30d' } = req.body || {};
 
   if (!action) {
     return res.status(400).json({ error: 'Missing required parameter: action' });
   }
 
-  // Strategy 1: Try AllRatesToday SDK if API key exists
+  const apiKey = process.env.VITE_ALLRATESTODAY_API_KEY || process.env.ALLRATESTODAY_API_KEY;
+  let data, rawData;
+
+  // 1. Try AllRatesToday SDK if API key is present & valid
   if (apiKey) {
     try {
       const ratesClient = new AllRatesToday({ apiKey });
-      let data;
+
       if (action === 'getRate') {
-        data = await ratesClient.getRate(sourceCurrency, targetCurrency);
+        rawData = await ratesClient.getRate(sourceCurrency, targetCurrency);
+        data = Array.isArray(rawData) ? rawData[0] : rawData;
       } else if (action === 'getHistoricalRates') {
-        data = await ratesClient.getHistoricalRates(sourceCurrency, targetCurrency, period);
+        rawData = await ratesClient.getHistoricalRates(sourceCurrency, targetCurrency, period);
+        data = (rawData && Array.isArray(rawData.data)) ? rawData.data : (Array.isArray(rawData) ? rawData : rawData);
       }
+
       if (data) {
-        return res.status(200).json({ data });
+        return res.status(200).json({ data, timestamp: new Date().toISOString() });
       }
-    } catch (err) {
-      console.warn('AllRatesToday SDK error, falling back to open exchange rate API:', err.message);
+    } catch (error) {
+      console.warn('AllRatesToday SDK engaged live public rate API:', error.message || error);
     }
   }
 
-  // Strategy 2: Fetch live official rates from Open Exchange Rates API
+  // 2. Real-Time Full Precision Live Rate & Historical Data Fetch
   try {
-    const liveRes = await fetch(`https://open.er-api.com/v6/latest/${sourceCurrency}`);
-    if (liveRes.ok) {
-      const json = await liveRes.json();
-      const currentRate = json?.rates?.[targetCurrency];
-
-      if (typeof currentRate === 'number') {
-        if (action === 'getRate') {
-          return res.status(200).json({ data: currentRate });
-        }
-
-        if (action === 'getHistoricalRates') {
-          const days = parseInt(period, 10) || 30;
-          const series = [];
-          const now = new Date();
-
-          for (let i = days - 1; i >= 0; i--) {
-            const d = new Date(now);
-            d.setDate(d.getDate() - i);
-            const dateStr = d.toISOString().slice(0, 10);
-
-            // Small natural sine + noise drift anchored on current live rate
-            const drift = Math.sin(i / 5) * 1.2 + (Math.random() - 0.5) * 0.4;
-            const rate = Math.round((currentRate - drift) * 100) / 100;
-            series.push({ date: dateStr, rate });
-          }
-
-          return res.status(200).json({ data: series });
-        }
-      }
+    const fetchTimestamp = new Date().toISOString();
+    if (action === 'getRate') {
+      const liveRate = await fetchRealTimeRate(sourceCurrency, targetCurrency);
+      data = {
+        rate: Number(liveRate),
+        source: sourceCurrency,
+        target: targetCurrency,
+        time: fetchTimestamp
+      };
+    } else if (action === 'getHistoricalRates') {
+      const daysCount = parseInt(period) || 30;
+      data = await fetchRealHistoricalRates(sourceCurrency, targetCurrency, daysCount);
+    } else {
+      return res.status(400).json({ error: 'Invalid action specified' });
     }
-  } catch (err) {
-    console.error('Open ER API Error:', err);
-  }
 
-  return res.status(500).json({ error: 'Unable to fetch official exchange rates at this time.' });
+    return res.status(200).json({ data, source: 'real_time_currency_api', timestamp: fetchTimestamp });
+  } catch (fallbackError) {
+    console.error('All Rates API Error:', fallbackError);
+    return res.status(500).json({ error: fallbackError.message || 'Exchange rate API request failed' });
+  }
 }
